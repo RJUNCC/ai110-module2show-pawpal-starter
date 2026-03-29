@@ -6,12 +6,13 @@
 
 - Briefly describe your initial UML design.
 - What classes did you include, and what responsibilities did you assign to each?
+- Answer: We should be able to enter owner + pet information, add and edit tasks, and generate a daily plan with reasoning. The four classes we included are Pet, Task, Scheduler, and Owner. Pet is a single care item that holds the data describing what needs to be done. The Pet class is the animal being cared for. Owner is the pets owner. And scheduler takes an owner and a pet, and fits them in with the owner's available time and produces a daily plan. 
 
 **b. Design changes**
 
 - Did your design change during implementation?
 - If yes, describe at least one change and why you made it.
-
+- Answer: There were a few missing relationships like scheduler having no link to owner.available_time and no way to remove or edit a task from pet. The changes we made were adding a remove_task method, changing category and time of day to an Enum to prevent invalid values, add priority validation, and have scheduler pull tasks fresh in generate_plan method instead of caching at init. 
 ---
 
 ## 2. Scheduling Logic and Tradeoffs
