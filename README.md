@@ -31,6 +31,23 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Smarter Scheduling
+
+The scheduler goes beyond a simple to-do list with several logic improvements:
+
+**Recurring tasks** — each `Task` has a `frequency` (`daily`, `weekly`, or `as_needed`). The scheduler calls `is_due()` before including a task in the plan, so weekly tasks are automatically suppressed until 7 days have passed. When a task is marked complete via `Pet.complete_task()`, a fresh copy is auto-generated for the next occurrence.
+
+**Time-of-day ordering** — tasks have an optional `time_of_day` field (`morning`, `afternoon`, `evening`). The generated plan is always sorted into chronological order, regardless of the order tasks were added.
+
+**Task filtering** — `Pet` supports filtering tasks by completion status (`get_tasks_by_status`) or category (`get_tasks_by_category`). `Owner` supports cross-pet filtering by pet name and/or completion status (`filter_tasks`).
+
+**Conflict detection** — three levels of overlap checking, all returning warning strings (never crashing):
+- `Scheduler.detect_time_overlaps()` — any two tasks for one pet sharing the same period
+- `Scheduler.detect_conflicts()` — tasks whose combined duration exceeds the period's time budget
+- `Owner.detect_cross_pet_overlaps()` — tasks across different pets competing for the same period
+
+Call `owner.get_warnings()` or `scheduler.get_warnings()` for a single aggregated list of all warnings.
+
 ### Suggested workflow
 
 1. Read the scenario carefully and identify requirements and edge cases.
