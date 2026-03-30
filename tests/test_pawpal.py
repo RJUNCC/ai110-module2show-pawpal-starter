@@ -456,3 +456,200 @@ def test_detect_conflicts_returns_list(basic_pet, owner_with_pet):
     owner, _ = owner_with_pet
     scheduler = Scheduler(owner, basic_pet)
     assert isinstance(scheduler.detect_conflicts(), list)
+
+
+# --- Edge cases: greedy scheduling boundaries ---
+
+def test_generate_plan_zero_available_time(basic_pet):
+    owner = Owner("Alex", available_time=0)
+    owner.add_pet(basic_pet)
+    basic_pet.add_task(Task("Walk", Category.WALK, duration=10, priority=5))
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan()
+    assert plan["scheduled"] == []
+    assert len(plan["skipped"]) == 1
+
+def test_generate_plan_task_duration_exactly_equals_available_time(basic_pet):
+    owner = Owner("Alex", available_time=30)
+    owner.add_pet(basic_pet)
+    basic_pet.add_task(Task("Walk", Category.WALK, duration=30, priority=5))
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan()
+    assert len(plan["scheduled"]) == 1
+    assert plan["skipped"] == []
+
+def test_generate_plan_all_tasks_exceed_available_time(basic_pet):
+    owner = Owner("Alex", available_time=10)
+    owner.add_pet(basic_pet)
+    basic_pet.add_task(Task("Walk", Category.WALK, duration=30, priority=5))
+    basic_pet.add_task(Task("Feed", Category.FEEDING, duration=20, priority=4))
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan()
+    assert plan["scheduled"] == []
+    assert len(plan["skipped"]) == 2
+
+
+# --- Edge cases: weekly is_due boundary ---
+
+def test_is_due_weekly_future_last_completed_date():
+    task = Task("Bath", Category.WALK, duration=20, priority=3, frequency="weekly",
+                last_completed_date="2030-01-01")
+    assert task.is_due("2026-03-30") is False
+
+
+# --- Edge cases: complete_task called twice creates two copies ---
+
+def test_complete_task_twice_creates_two_copies(basic_pet, basic_task):
+    basic_pet.add_task(basic_task)
+    basic_pet.complete_task("Morning Walk", today="2026-03-29")
+    basic_pet.complete_task("Morning Walk", today="2026-03-30")
+    # original + first copy (completed) + second copy = 3 total
+    assert len(basic_pet.get_tasks()) == 3
+    completed = basic_pet.get_tasks_by_status(True)
+    assert len(completed) == 2
+
+
+# --- Edge cases: sort stability with same time_of_day ---
+
+def test_sort_by_time_stable_within_same_period(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    t1 = Task("First", Category.FEEDING, duration=5, priority=5, time_of_day=TimeOfDay.MORNING)
+    t2 = Task("Second", Category.MEDICATION, duration=5, priority=3, time_of_day=TimeOfDay.MORNING)
+    basic_pet.add_task(t1)
+    basic_pet.add_task(t2)
+    scheduler = Scheduler(owner, basic_pet)
+    result = scheduler.sort_by_time(basic_pet.get_tasks())
+    # Both are morning — insertion order (stable sort) should be preserved
+    assert result[0].name == "First"
+    assert result[1].name == "Second"
+
+def test_sort_by_time_untimed_tasks_always_last(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    basic_pet.add_task(Task("Untimed", Category.FEEDING, duration=5, priority=5))
+    basic_pet.add_task(Task("Evening", Category.WALK, duration=10, priority=3,
+                            time_of_day=TimeOfDay.EVENING))
+    basic_pet.add_task(Task("Morning", Category.MEDICATION, duration=5, priority=1,
+                            time_of_day=TimeOfDay.MORNING))
+    scheduler = Scheduler(owner, basic_pet)
+    result = scheduler.sort_by_time(basic_pet.get_tasks())
+    assert result[-1].name == "Untimed"
+
+
+# --- Edge cases: completed tasks still appear in generate_plan ---
+
+def test_completed_daily_task_still_appears_in_plan(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    task = Task("Feed", Category.FEEDING, duration=10, priority=4)
+    task.mark_complete("2026-03-29")
+    basic_pet.add_task(task)
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan(today="2026-03-30")
+    # daily tasks are always due regardless of completed flag
+    assert any(t.name == "Feed" for t in plan["scheduled"])
+
+def test_complete_task_original_and_copy_both_in_plan(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    basic_pet.add_task(Task("Feed", Category.FEEDING, duration=5, priority=4))
+    basic_pet.complete_task("Feed", today="2026-03-29")
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan(today="2026-03-30")
+    # Both the completed original and the new copy are daily — both are due
+    feed_tasks = [t for t in plan["scheduled"] if t.name == "Feed"]
+    assert len(feed_tasks) == 2
+
+
+# --- Sorting: additional correctness ---
+
+def test_sort_by_time_all_periods_plus_none(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    basic_pet.add_task(Task("Untimed",   Category.FEEDING,    duration=5, priority=3))
+    basic_pet.add_task(Task("Evening",   Category.WALK,       duration=5, priority=3, time_of_day=TimeOfDay.EVENING))
+    basic_pet.add_task(Task("Morning",   Category.MEDICATION, duration=5, priority=3, time_of_day=TimeOfDay.MORNING))
+    basic_pet.add_task(Task("Afternoon", Category.FEEDING,    duration=5, priority=3, time_of_day=TimeOfDay.AFTERNOON))
+    scheduler = Scheduler(owner, basic_pet)
+    result = scheduler.sort_by_time(basic_pet.get_tasks())
+    names = [t.name for t in result]
+    assert names == ["Morning", "Afternoon", "Evening", "Untimed"]
+
+def test_sort_by_time_empty_list(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    scheduler = Scheduler(owner, basic_pet)
+    assert scheduler.sort_by_time([]) == []
+
+def test_sort_by_time_single_task(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    task = Task("Walk", Category.WALK, duration=10, priority=3, time_of_day=TimeOfDay.MORNING)
+    scheduler = Scheduler(owner, basic_pet)
+    assert scheduler.sort_by_time([task]) == [task]
+
+def test_sort_by_time_all_none_preserves_insertion_order(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    t1 = Task("First",  Category.FEEDING,    duration=5, priority=3)
+    t2 = Task("Second", Category.MEDICATION, duration=5, priority=3)
+    t3 = Task("Third",  Category.WALK,       duration=5, priority=3)
+    scheduler = Scheduler(owner, basic_pet)
+    result = scheduler.sort_by_time([t1, t2, t3])
+    assert [t.name for t in result] == ["First", "Second", "Third"]
+
+
+# --- Recurrence: additional logic ---
+
+def test_is_due_weekly_six_days_ago_not_due():
+    task = Task("Bath", Category.WALK, duration=20, priority=3, frequency="weekly",
+                last_completed_date="2026-03-24")
+    assert task.is_due("2026-03-30") is False  # only 6 days
+
+def test_generate_plan_mixed_due_and_not_due(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    basic_pet.add_task(Task("Daily Feed",  Category.FEEDING,    duration=10, priority=4, frequency="daily"))
+    basic_pet.add_task(Task("Weekly Bath", Category.WALK,       duration=20, priority=5,
+                            frequency="weekly", last_completed_date="2026-03-28"))
+    basic_pet.add_task(Task("As Needed",   Category.MEDICATION, duration=5,  priority=3, frequency="as_needed"))
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan(today="2026-03-30")
+    scheduled_names = [t.name for t in plan["scheduled"]]
+    assert "Daily Feed" in scheduled_names
+    assert "As Needed" in scheduled_names
+    assert "Weekly Bath" not in scheduled_names
+    assert "Weekly Bath" not in [t.name for t in plan["skipped"]]
+
+def test_weekly_task_due_after_seven_days_in_plan(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet
+    basic_pet.add_task(Task("Weekly Bath", Category.WALK, duration=20, priority=5,
+                            frequency="weekly", last_completed_date="2026-03-23"))
+    scheduler = Scheduler(owner, basic_pet)
+    plan = scheduler.generate_plan(today="2026-03-30")  # exactly 7 days later
+    assert any(t.name == "Weekly Bath" for t in plan["scheduled"])
+
+
+# --- Conflict detection: additional cases ---
+
+def test_detect_conflicts_multiple_periods_both_flagged(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet  # 60 min; budget = 20 min per period
+    basic_pet.add_task(Task("Morning Walk", Category.WALK,    duration=15, priority=5, time_of_day=TimeOfDay.MORNING))
+    basic_pet.add_task(Task("Morning Feed", Category.FEEDING, duration=10, priority=4, time_of_day=TimeOfDay.MORNING))
+    basic_pet.add_task(Task("Eve Med 1",    Category.MEDICATION, duration=15, priority=3, time_of_day=TimeOfDay.EVENING))
+    basic_pet.add_task(Task("Eve Med 2",    Category.MEDICATION, duration=10, priority=3, time_of_day=TimeOfDay.EVENING))
+    scheduler = Scheduler(owner, basic_pet)
+    conflicts = scheduler.detect_conflicts()
+    assert len(conflicts) == 2
+    assert any("morning" in c.lower() for c in conflicts)
+    assert any("evening" in c.lower() for c in conflicts)
+
+def test_detect_conflicts_three_tasks_in_period(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet  # morning budget = 20 min; 3 tasks total 30 min
+    basic_pet.add_task(Task("Task A", Category.WALK,       duration=10, priority=5, time_of_day=TimeOfDay.MORNING))
+    basic_pet.add_task(Task("Task B", Category.FEEDING,    duration=10, priority=4, time_of_day=TimeOfDay.MORNING))
+    basic_pet.add_task(Task("Task C", Category.MEDICATION, duration=10, priority=3, time_of_day=TimeOfDay.MORNING))
+    scheduler = Scheduler(owner, basic_pet)
+    conflicts = scheduler.detect_conflicts()
+    assert len(conflicts) == 1
+    assert "morning" in conflicts[0].lower()
+
+def test_detect_conflicts_exactly_at_budget_not_flagged(basic_pet, owner_with_pet):
+    owner, _ = owner_with_pet  # 60 min; morning budget = exactly 20 min
+    basic_pet.add_task(Task("Walk", Category.WALK,    duration=10, priority=5, time_of_day=TimeOfDay.MORNING))
+    basic_pet.add_task(Task("Feed", Category.FEEDING, duration=10, priority=4, time_of_day=TimeOfDay.MORNING))
+    # 10 + 10 = 20 == budget, should NOT flag
+    scheduler = Scheduler(owner, basic_pet)
+    assert scheduler.detect_conflicts() == []

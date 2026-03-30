@@ -48,12 +48,16 @@
 **a. What you tested**
 
 - What behaviors did you test?
+- Answer: We tested five core areas: (1) greedy scheduling stays within available time and correctly populates scheduled vs skipped; (2) `is_due()` correctly gates weekly tasks including the exact 7-day boundary; (3) `complete_task()` marks tasks done, auto-generates the next occurrence, and only matches incomplete tasks so calling it twice completes each copy in turn; (4) sort order places tasks in MORNING → AFTERNOON → EVENING → unassigned order and is stable within the same period; (5) conflict detection returns warning strings at the per-pet and cross-pet level without crashing.
 - Why were these tests important?
+- Answer: These tests matter because the scheduler's output is only trustworthy if the constraints are enforced correctly. A bug in `is_due()` could silently drop or duplicate tasks. A bug in `complete_task()` — which we actually caught during testing — was re-completing already-done tasks instead of the next copy, which would have caused incorrect task counts and confusing schedules. Tests gave us confidence to refactor freely without introducing regressions.
 
 **b. Confidence**
 
 - How confident are you that your scheduler works correctly?
+- Answer: High confidence for the core scheduling loop, task filtering, and recurring task logic — all are well-covered. Moderate confidence around edge cases involving multiple pets sharing time budgets, since each pet currently gets the full available time independently. The warning system catches overlaps but the plan itself doesn't enforce a shared budget.
 - What edge cases would you test next if you had more time?
+- Answer: (1) Zero available time — verified, nothing schedules. (2) Task duration exactly equals available time — verified, it schedules correctly. (3) A `last_completed_date` set in the future — verified, correctly treated as not due. (4) The behavior when both a completed original and its copy are daily — both appear in the plan, which is technically correct but could surprise a user. (5) Shared time budget across multiple pets — currently untested and the most realistic gap for a real-world scenario.
 
 ---
 

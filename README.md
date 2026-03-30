@@ -48,6 +48,34 @@ The scheduler goes beyond a simple to-do list with several logic improvements:
 
 Call `owner.get_warnings()` or `scheduler.get_warnings()` for a single aggregated list of all warnings.
 
+## Testing PawPal+
+
+### Running the tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+### What the tests cover
+
+The test suite contains **79 tests** across five areas:
+
+| Area | What's verified |
+|---|---|
+| **Task** | Serialization, priority validation (boundaries 1 and 5), `mark_complete()`, `is_due()` for all three frequency types including 7-day weekly boundary, `next_occurrence()` returns a correct fresh copy |
+| **Pet** | Adding/removing/editing tasks, `complete_task()` marks done and auto-creates the next occurrence (only for incomplete tasks), filter by status and category |
+| **Owner** | Adding pets, cross-pet task filtering by name and completion status |
+| **Scheduler** | Greedy plan respects available time, tasks sorted MORNING → AFTERNOON → EVENING → unassigned, weekly tasks excluded when not due, mix of due/not-due tasks in one plan, zero available time, task duration exactly equal to available time |
+| **Conflict detection** | Per-pet time overlap, budget-based conflicts, conflicts across multiple periods simultaneously, 3+ tasks in one period, budget boundary (exactly at limit is not flagged), cross-pet overlaps, `get_warnings()` aggregates everything without crashing |
+
+### Reliability: ★★★★☆ (4/5)
+
+The core scheduling loop, recurring task logic, sorting, and conflict detection are all well-tested including boundary conditions and edge cases. One star is withheld because:
+
+- Completed daily tasks still appear in `generate_plan()` (documented behavior, but likely surprising to users)
+- Each pet independently receives the full `available_time` budget — a multi-pet schedule can silently over-commit the owner's day
+- The Streamlit UI has no test coverage
+
 ### Suggested workflow
 
 1. Read the scenario carefully and identify requirements and edge cases.

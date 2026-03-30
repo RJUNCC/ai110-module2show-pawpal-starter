@@ -106,15 +106,19 @@ class Pet:
         return [t for t in self.tasks if t.category == category]
 
     def complete_task(self, task_name: str, today: str = None) -> None:
-        """Mark a task complete and auto-add the next occurrence for daily/weekly tasks."""
+        """Mark a task complete and auto-add the next occurrence for daily/weekly tasks.
+
+        Only matches incomplete tasks — skips already-completed ones so calling
+        this twice completes each copy in turn rather than re-completing the original.
+        """
         for task in self.tasks:
-            if task.name == task_name:
+            if task.name == task_name and not task.completed:
                 task.mark_complete(today)
                 next_task = task.next_occurrence()
                 if next_task is not None:
                     self.tasks.append(next_task)
                 return
-        raise ValueError(f"Task '{task_name}' not found")
+        raise ValueError(f"Task '{task_name}' not found or already completed")
 
     def remove_task(self, task_name: str) -> None:
         """Remove a task by name, silently ignoring if not found."""
