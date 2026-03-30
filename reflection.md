@@ -20,12 +20,15 @@
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+- Answer: The scheduler considers two hard constraints and two soft constraints. Hard constraints are available time (tasks are dropped to skipped if they don't fit within owner.available_time) and due date (weekly tasks are excluded if completed within the last 7 days). Soft constraints are priority (rank_tasks() sorts highest priority first so high-priority tasks claim time before lower ones) and time of day (the final scheduled list is sorted morning → afternoon → evening → unassigned). The hard constraints determine what gets scheduled at all; the soft constraints determine order and presentation.
 - How did you decide which constraints mattered most?
+- Answer: Available time and due date matter most because violating them produces incorrect behavior — scheduling more than the owner has time for, or showing a task that shouldn't appear yet. Priority and time-of-day are ordering preferences that improve the plan's quality but don't break it if wrong. We prioritized correctness over polish.
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
 - Why is that tradeoff reasonable for this scenario?
+- Answer: The scheduler uses a greedy algorithm — it picks tasks in priority order and fits each one in until time runs out, without looking ahead. This can produce a suboptimal schedule: a single high-priority long task might consume most of the time budget and cause several shorter high-value tasks to be skipped, whereas a smarter knapsack-style solver could fit more total value into the same window. The tradeoff is reasonable here because pet care tasks are simple enough that priority order closely reflects what the owner actually wants done first — medications and feedings rank high and are short, so they almost always fit. The tasks most likely to be skipped (vet appointments, long grooming sessions) are genuinely the ones an owner would deprioritize on a busy day. The greedy approach also stays fast, transparent, and easy to explain in the UI.
 
 ---
 
@@ -34,12 +37,15 @@
 **a. How you used AI**
 
 - How did you use AI tools during this project (for example: design brainstorming, debugging, refactoring)?
+- Answer: AI was used at every stage of the project. During design we brainstormed the four core classes, identified missing relationships (like Scheduler having no link to owner.available_time), and drafted the UML diagram. During implementation AI generated class skeletons with dataclass decorators, implemented method bodies, and suggested improvements like switching category and time_of_day to Enums and adding priority validation in __post_init__. During testing AI identified edge cases we hadn't considered — like calling complete_task() twice, tasks at the exact time budget boundary, and weekly tasks with a future last_completed_date. For refactoring it consolidated conflict detection into the get_warnings() aggregator pattern and added docstrings to all algorithmic methods.
 - What kinds of prompts or questions were most helpful?
+- Answer: The most useful prompts were specific and structural: "what are the missing relationships or potential logic bottlenecks in this file?" and "what are the most important edge cases to test for a scheduler with sorting and recurring tasks?" Open-ended design questions like "brainstorm the main objects needed" were good for getting started, but targeted questions about specific behaviors or gaps produced the most actionable output.
 
 **b. Judgment and verification**
 
 - Describe one moment where you did not accept an AI suggestion as-is.
 - How did you evaluate or verify what the AI suggested?
+- Answer: When AI suggested caching tasks in Scheduler.__init__ as self.tasks = pet.get_tasks(), we identified this as a bug — if tasks changed on the pet after the scheduler was created, the scheduler would use stale data. We changed generate_plan() to pull tasks fresh from the pet each time it runs instead. We verified this by reasoning through what would happen if Pet.add_task() was called after Scheduler was instantiated: with caching, the new task would be invisible to the scheduler; without it, every generate_plan() call sees the current state. The test suite confirmed the correct behavior.
 
 ---
 
@@ -74,3 +80,5 @@
 **c. Key takeaway**
 
 - What is one important thing you learned about designing systems or working with AI on this project?
+
+- Answers: I like the planning, brainstorming, and building tests. Using AI to build UI is kind of bad, though. I would improve the way adding a tasks works with the UI because it's a little bit janky and not nice to look at. Using Enums was something I found interesting for Category and TimeOfDay. Also, the streamlit states are nice features. 

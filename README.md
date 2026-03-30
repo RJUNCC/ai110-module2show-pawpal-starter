@@ -31,6 +31,34 @@ source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Features
+
+### Greedy Priority Scheduler
+Tasks are ranked by priority (1–5) and scheduled in order until the owner's available time is exhausted. Higher-priority tasks always claim time before lower-priority ones. Tasks that don't fit are collected in a `skipped` list with an explanation. The algorithm is intentionally simple — transparent and predictable for everyday pet care, where priority order reliably reflects owner intent.
+
+### Time-of-Day Ordering
+Each task has an optional `time_of_day` field (`morning`, `afternoon`, `evening`). After the greedy pass selects which tasks to schedule, the final plan is sorted chronologically using a stable sort — so tasks within the same period preserve their original insertion order. Tasks with no time preference are placed last.
+
+### Recurring Task Logic
+Tasks declare a `frequency`: `daily`, `weekly`, or `as_needed`. Before scheduling, each task is passed through `is_due(today)`:
+- **Daily / as_needed** — always included
+- **Weekly** — included only if never completed, or if 7+ days have elapsed since `last_completed_date`
+
+When a task is completed via `Pet.complete_task()`, the original is marked done and a fresh copy is automatically appended for the next occurrence. The copy preserves `last_completed_date` so the weekly gate works correctly on the new instance. `as_needed` tasks produce no copy.
+
+### Task Filtering
+- `Pet.get_tasks_by_status(completed)` — returns all done or all incomplete tasks for a pet
+- `Pet.get_tasks_by_category(category)` — returns tasks of a specific type (feeding, walk, medication, appointment)
+- `Owner.filter_tasks(pet_name, completed)` — cross-pet filter combining pet name and/or completion status in a single call
+
+### Conflict Detection
+Three levels of overlap detection, all returning warning strings rather than raising exceptions:
+- `Scheduler.detect_time_overlaps()` — flags any two or more tasks for the same pet sharing a time-of-day period
+- `Scheduler.detect_conflicts()` — flags periods where the combined task duration exceeds 1/3 of the owner's available time (the assumed per-period budget); a single large task alone is not flagged
+- `Owner.detect_cross_pet_overlaps()` — flags periods where tasks from different pets compete for the owner's attention simultaneously
+
+Call `scheduler.get_warnings()` or `owner.get_warnings()` for a single aggregated list covering all three checks.
+
 ## Smarter Scheduling
 
 The scheduler goes beyond a simple to-do list with several logic improvements:
@@ -85,3 +113,5 @@ The core scheduling loop, recurring task logic, sorting, and conflict detection 
 5. Add tests to verify key behaviors.
 6. Connect your logic to the Streamlit UI in `app.py`.
 7. Refine UML so it matches what you actually built.
+
+![](images/streamlit_ss.png)
